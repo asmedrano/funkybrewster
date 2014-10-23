@@ -7,4 +7,4 @@ Finds functions and shows where they are used
 ```go get github.com/asmedrano/funkybrewster```
 
 ###Usage
-./funkybrewster -d /path/to/code/dir
+```./funkybrewster -d /path/to/code/dir```
