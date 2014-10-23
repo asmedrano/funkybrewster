@@ -5,8 +5,8 @@ import "io/ioutil"
 import "os"
 
 func TestFindFunksInStr(t *testing.T) {
-	s := "function hello() {} def hello(): func hello() {}"
-	if len(findFunksInStr(s)) != 3 {
+	s := []byte("function hello() {} def hello(): func hello() {}")
+	if len(findFunksInStr(s, "test")) != 3 {
 		t.Error("Fail")
 	}
 }

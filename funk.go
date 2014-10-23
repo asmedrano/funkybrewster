@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
-	//"strings"
+	"strings"
 	"bytes"
 	"flag"
 	"io/ioutil"
@@ -19,15 +19,16 @@ var FUNC_DECS []string = []string{
 	"func",
 }
 
-var FuncRefs []string = []string{}
+var FuncRefs []FileRef = []FileRef{}
 
 type FileRef struct {
-	Name    string
-	LineNum string
+	FilePath string
+	Text     string
+	LineNum  string
 }
 
 func (f FileRef) String() string {
-    return fmt.Sprintf("File: %v LineNum: %v\n", f.Name, f.LineNum)
+	return fmt.Sprintf("File: %v LineNum: %v\n", f.FilePath, f.LineNum)
 }
 
 func main() {
@@ -38,9 +39,10 @@ func main() {
 	traverseDir(dir)
 	// Now we have collected all the func names
 	for i := range FuncRefs {
-        fmt.Print(fmt.Sprintf("\nSearching for: %v\n", FuncRefs[i])) // TODO: Need to display what file/line func is declared
-		fmt.Print("-----------------------------------------------------\n")
-		results := findFuncNameInFiles(FuncRefs[i], dir)
+		ref := FuncRefs[i]
+		fmt.Print(fmt.Sprintf("\nSearching for: %v\nDeclared in: %v, Line: %v", ref.Text[:len(ref.Text)-1], ref.FilePath, ref.LineNum)) // TODO: Need to display what file/line func is declared
+		fmt.Print("\n-----------------------------------------------------\n")
+		results := findFuncNameInFiles(ref.Text, dir)
 		fmt.Print(fmt.Sprintf("%d Occurances\n", len(results)))
 		fmt.Print(results)
 	}
@@ -57,7 +59,8 @@ func traverseDir(dirpath string) {
 
 func checkFile(path string, f os.FileInfo, err error) error {
 	if f != nil {
-		if !f.IsDir() { // OMIT DIRS
+        // OMIT DIRS and swp files(CAUSE EVERYONE USES VIM RIGHT????) TODO:Later we'll filter out thigns properly
+		if !f.IsDir() && !strings.Contains(f.Name(), ".swp") { 
 			openAndSearchFile(path)
 		}
 	}
@@ -65,26 +68,33 @@ func checkFile(path string, f os.FileInfo, err error) error {
 }
 
 func openAndSearchFile(filepath string) {
-	file, err := ioutil.ReadFile(filepath)
+	fileContent, err := ioutil.ReadFile(filepath)
 	if err != nil {
 		fmt.Println(err)
 	}
-	results := findFunksInStr(string(file))
+	results := findFunksInStr(fileContent, filepath)
 	FuncRefs = append(FuncRefs, results...) // TODO: THis global thing is gnarly
 }
 
 // Find all functions in string and return a slice of func names
-func findFunksInStr(str string) []string {
-	matches := []string{}
-	rx := "("
-	for i := range FUNC_DECS {
-		rx += fmt.Sprintf("\\b%v\\b \\w+|", FUNC_DECS[i])
-	}
-	rx = rx[:len(rx)-1] + ")"
-	re := regexp.MustCompile(rx)
-	rawMatches := re.FindAllString(str, -1)
-	for j := range rawMatches {
-		matches = append(matches, rawMatches[j])
+func findFunksInStr(str []byte, sourceFilePath string) []FileRef {
+	// TODO split str into lines
+	lines := bytes.Split(str, []byte("\n"))
+	matches := []FileRef{}
+	if len(lines) != 0 {
+		for i := range lines {
+			line := string(lines[i])
+			rx := "("
+			for i := range FUNC_DECS {
+				rx += fmt.Sprintf("\\b%v\\b \\w+\\s?\\(|", FUNC_DECS[i])
+			}
+			rx = rx[:len(rx)-1] + ")"
+			re := regexp.MustCompile(rx)
+			rawMatches := re.FindAllString(line, -1)
+			for j := range rawMatches {
+				matches = append(matches, FileRef{sourceFilePath, rawMatches[j], fmt.Sprintf("%d", i+1)})
+			}
+		}
 	}
 
 	return matches
@@ -114,7 +124,7 @@ func grepWrap(str string, dirpath string) []FileRef {
 			// parse the grep output. It looks like this ```/tmp/funcDEC.code:1:funcStyle1```
 			parts := bytes.Split(ln, []byte(":"))
 			if len(parts) > 1 {
-				results = append(results, FileRef{string(parts[0]), string(parts[1])})
+				results = append(results, FileRef{string(parts[0]), string(parts[2]), string(parts[1])})
 			}
 		}
 	}
